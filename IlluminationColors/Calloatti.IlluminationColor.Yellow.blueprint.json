@@ -1,0 +1,14 @@
+﻿{
+    "IlluminationColorSpec":  {
+                                  "Id":  "Calloatti.Yellow",
+                                  "Color":  {
+                                                "g":  1,
+                                                "r":  1,
+                                                "b":  0,
+                                                "a":  1
+                                            }
+                              },
+    "IlluminationPresetSpec":  {
+                                   "Order":  11010
+                               }
+}
