@@ -10,7 +10,7 @@ namespace Calloatti.AutoTweaks
   [Context("MapEditor")]
   internal class PatchConfigurator : IConfigurator
   {
-    private const string HarmonyId = "calloatti.autotools";
+    private const string HarmonyId = "calloatti.autotweaks";
     private static Harmony _harmony;
 
     public void Configure(IContainerDefinition containerDefinition)
@@ -20,7 +20,7 @@ namespace Calloatti.AutoTweaks
       if (_harmony == null)
       {
         _harmony = new Harmony(HarmonyId);
-        _harmony.PatchAll(typeof(PatchConfigurator).Assembly); // This now auto-loads all patches in PatchColor.cs!
+        _harmony.PatchAll(typeof(PatchConfigurator).Assembly);
         Debug.Log($"[{HarmonyId}] All Harmony patches applied successfully!");
       }
     }
@@ -37,7 +37,7 @@ namespace Calloatti.AutoTweaks
 
     public void Load()
     {
-      var textAsset = _assetLoader.LoadSafe<TextAsset>("resources/autotools.colornames");
+      var textAsset = _assetLoader.LoadSafe<TextAsset>("resources/autotweaks.colornames");
 
       if (textAsset != null)
       {
@@ -46,7 +46,7 @@ namespace Calloatti.AutoTweaks
       }
       else
       {
-        Debug.LogWarning("[AutoTweaks] Could not find 'resources/autotools.colornames' text asset.");
+        Debug.LogWarning("[AutoTweaks] Could not find 'resources/autotweaks.colornames' text asset.");
       }
     }
   }

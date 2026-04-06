@@ -32,7 +32,7 @@ namespace Calloatti.AutoTweaks
           }
         }
       }
-      catch (Exception e) { Debug.LogError($"[AutoTools] Load Error: {e.Message}"); }
+      catch (Exception e) { Debug.LogError($"[AutoTweaks Load Error: {e.Message}"); }
     }
   }
 
