@@ -1,2 +1,5 @@
+1.0.1
+Update to 1.1.0.0
+Add filter to prevent duplicate inputs
 1.0.0
 Initial release

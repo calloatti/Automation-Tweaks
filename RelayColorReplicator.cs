@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Timberborn.Automation;
 using Timberborn.AutomationBuildings;
 using Timberborn.BaseComponentSystem;
@@ -20,12 +21,12 @@ namespace Calloatti.AutoTweaks
     private Relay _relay;
     private Automator _automator;
     private CustomizableIlluminator _customizableIlluminator;
-    private CustomizableIlluminator _inputACustomizableIlluminator;
-    private CustomizableIlluminator _inputBCustomizableIlluminator;
 
-    private int _triggeringInput = 1; // 1 for A, 2 for B
-    private bool _prevAActive;
-    private bool _prevBActive;
+    private readonly List<CustomizableIlluminator> _subscribedIlluminators = new List<CustomizableIlluminator>();
+
+    // FIX: Swapped out the brittle sequential list for a precise dictionary keyed by transmitter to prevent UI index desyncs
+    private readonly Dictionary<Automator, bool> _prevActiveStatesMap = new Dictionary<Automator, bool>();
+    private int _triggeringInputIndex = 0;
 
     public bool IsColorReplicationEnabled { get; private set; }
 
@@ -92,25 +93,21 @@ namespace Calloatti.AutoTweaks
       UnsubscribeFromInputColors();
       if (!IsColorReplicationEnabled) return;
 
-      if (_relay.InputA != null)
+      for (int i = 0; i < _relay.Inputs.Count; i++)
       {
-        _inputACustomizableIlluminator = _relay.InputA.GetComponent<CustomizableIlluminator>();
-        if (_inputACustomizableIlluminator != null && _inputACustomizableIlluminator)
+        var inputConn = _relay.Inputs[i];
+        if (inputConn.Transmitter != null)
         {
-          _inputACustomizableIlluminator.CustomColorChanged += OnInputCustomColorChanged;
+          var illum = inputConn.Transmitter.GetComponent<CustomizableIlluminator>();
+          if (illum != null && illum)
+          {
+            illum.CustomColorChanged += OnInputCustomColorChanged;
+            _subscribedIlluminators.Add(illum);
+          }
         }
       }
 
-      if (_relay.UsesInputB && _relay.InputB != null)
-      {
-        _inputBCustomizableIlluminator = _relay.InputB.GetComponent<CustomizableIlluminator>();
-        if (_inputBCustomizableIlluminator != null && _inputBCustomizableIlluminator)
-        {
-          _inputBCustomizableIlluminator.CustomColorChanged += OnInputCustomColorChanged;
-        }
-      }
-
-      if (_inputACustomizableIlluminator != null || _inputBCustomizableIlluminator != null)
+      if (_subscribedIlluminators.Count > 0)
       {
         _customizableIlluminator.Lock();
       }
@@ -118,16 +115,14 @@ namespace Calloatti.AutoTweaks
 
     private void UnsubscribeFromInputColors()
     {
-      if (_inputACustomizableIlluminator != null)
+      foreach (var illum in _subscribedIlluminators)
       {
-        _inputACustomizableIlluminator.CustomColorChanged -= OnInputCustomColorChanged;
-        _inputACustomizableIlluminator = null;
+        if (illum != null && illum)
+        {
+          illum.CustomColorChanged -= OnInputCustomColorChanged;
+        }
       }
-      if (_inputBCustomizableIlluminator != null)
-      {
-        _inputBCustomizableIlluminator.CustomColorChanged -= OnInputCustomColorChanged;
-        _inputBCustomizableIlluminator = null;
-      }
+      _subscribedIlluminators.Clear();
       _customizableIlluminator.Unlock();
     }
 
@@ -140,62 +135,103 @@ namespace Calloatti.AutoTweaks
     {
       if (!IsColorReplicationEnabled) return;
 
-      bool aActive = _relay.InputA != null && _relay.InputA.State == AutomatorState.On;
-      bool bActive = _relay.UsesInputB && _relay.InputB != null && _relay.InputB.State == AutomatorState.On;
+      int inputCount = _relay.Inputs.Count;
+      int newTriggerIndex = _triggeringInputIndex;
 
-      // Determine which input caused the relay to turn ON based on its logic mode
+      // 1. AND MODE: Triggers when the absolute LAST required input flips to True
       if (_relay.Mode == RelayMode.And)
       {
-        if (aActive && bActive)
+        bool allActive = true;
+        int lastToTurnOn = _triggeringInputIndex;
+        for (int i = 0; i < inputCount; i++)
         {
-          // The one that turned on last completed the AND circuit
-          if (!_prevAActive && _prevBActive) _triggeringInput = 1;
-          else if (_prevAActive && !_prevBActive) _triggeringInput = 2;
+          bool currentActive = _relay.Inputs[i].IsConnected && _relay.Inputs[i].BooleanState;
+          if (!currentActive) allActive = false;
+
+          var tx = _relay.Inputs[i].Transmitter;
+          if (tx != null)
+          {
+            _prevActiveStatesMap.TryGetValue(tx, out bool wasActive);
+            if (currentActive && !wasActive) lastToTurnOn = i;
+          }
         }
+        if (allActive) newTriggerIndex = lastToTurnOn;
       }
+      // 2. OR MODE: The most recent single input to turn ON gains color dominance
       else if (_relay.Mode == RelayMode.Or)
       {
-        // The most recent input to turn ON becomes the trigger
-        if (aActive && !_prevAActive) _triggeringInput = 1;
-        if (bActive && !_prevBActive) _triggeringInput = 2;
+        for (int i = 0; i < inputCount; i++)
+        {
+          bool currentActive = _relay.Inputs[i].IsConnected && _relay.Inputs[i].BooleanState;
+          var tx = _relay.Inputs[i].Transmitter;
+          if (tx != null)
+          {
+            _prevActiveStatesMap.TryGetValue(tx, out bool wasActive);
+            if (currentActive && !wasActive) newTriggerIndex = i;
+          }
+        }
 
-        // Fallback: if the triggering input just turned off but the other is still on, revert to it
-        if (_triggeringInput == 1 && !aActive && bActive) _triggeringInput = 2;
-        if (_triggeringInput == 2 && !bActive && aActive) _triggeringInput = 1;
+        if (newTriggerIndex >= inputCount || !_relay.Inputs[newTriggerIndex].BooleanState)
+        {
+          for (int i = 0; i < inputCount; i++)
+          {
+            if (_relay.Inputs[i].IsConnected && _relay.Inputs[i].BooleanState)
+            {
+              newTriggerIndex = i;
+              break;
+            }
+          }
+        }
       }
+      // 3. XOR MODE: Pull color from the first active node processing the loop
       else if (_relay.Mode == RelayMode.Xor)
       {
-        // The active input triggers the XOR circuit
-        if (aActive && !bActive) _triggeringInput = 1;
-        else if (bActive && !aActive) _triggeringInput = 2;
+        for (int i = 0; i < inputCount; i++)
+        {
+          if (_relay.Inputs[i].IsConnected && _relay.Inputs[i].BooleanState)
+          {
+            newTriggerIndex = i;
+            break;
+          }
+        }
       }
       else
       {
-        // NOT / Passthrough defaults to Input A
-        _triggeringInput = 1;
+        newTriggerIndex = 0;
       }
 
-      // Save the state for the next evaluation tick
-      _prevAActive = aActive;
-      _prevBActive = bActive;
+      // FIX: Guard against out-of-bounds indices if a wire/row was just deleted in the UI
+      if (newTriggerIndex >= inputCount)
+      {
+        newTriggerIndex = 0;
+      }
 
-      // Only push a replicated color if the Relay output is actually evaluating to ON right now
+      // Commit states locked securely to the transmitter pointers
+      _prevActiveStatesMap.Clear();
+      for (int i = 0; i < inputCount; i++)
+      {
+        var tx = _relay.Inputs[i].Transmitter;
+        if (tx != null)
+        {
+          _prevActiveStatesMap[tx] = _relay.Inputs[i].IsConnected && _relay.Inputs[i].BooleanState;
+        }
+      }
+      _triggeringInputIndex = newTriggerIndex;
+
       if (_automator.UnfinishedState != AutomatorState.On)
       {
         return;
       }
 
-      // We now use the new nullable Color API directly
       Color? finalColor = null;
-
-      if (_triggeringInput == 2 && _relay.UsesInputB && _inputBCustomizableIlluminator != null)
+      if (_triggeringInputIndex < inputCount)
       {
-        finalColor = _inputBCustomizableIlluminator.CustomColor;
-      }
-      else if (_inputACustomizableIlluminator != null)
-      {
-        // Fallback to A if B is missing or if A is the actual trigger
-        finalColor = _inputACustomizableIlluminator.CustomColor;
+        var triggeringTransmitter = _relay.Inputs[_triggeringInputIndex].Transmitter;
+        if (triggeringTransmitter != null)
+        {
+          var illum = triggeringTransmitter.GetComponent<CustomizableIlluminator>();
+          if (illum != null) finalColor = illum.CustomColor;
+        }
       }
 
       if (finalColor.HasValue)
