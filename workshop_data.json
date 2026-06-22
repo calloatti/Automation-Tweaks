@@ -2,11 +2,12 @@
   "ItemId": "3700912819",
   "Name": "Automation Tweaks",
   "Visibility": "Public",
-  "UpdateDescription": true,
-  "UpdateVisibility": true,
+  "UpdateDescription": false,
+  "UpdateVisibility": false,
   "UpdatePreview": true,
   "UpdateTags": true,
   "Tags": [
+    "Update 1.1",
     "Update 1.0",
     "Quality of life"
   ]
