@@ -6,5 +6,9 @@
   </PropertyGroup>
 
   <Import Project="CommonModSettings.props" />
+  
+  <PropertyGroup>
+    <TimberbornPath>C:\Program Files (x86)\Steam\steamapps\common\timberborn_experimental\Timberborn_Data\Managed</TimberbornPath>
+  </PropertyGroup>
 
 </Project>
