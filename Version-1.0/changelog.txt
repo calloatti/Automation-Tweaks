@@ -1,4 +1,6 @@
+Game Version: 1.0.0.0 - Mod Version: 1.0.1
+- Version bump to match 1.1 mod version
 --------------------------------------------------------------------------------
-Game Version: 1.0.0.0
-Mod Version: 1.0.0
+Game Version: 1.0.0.0 - Mod Version: 1.0.0
 - Initial release
+--------------------------------------------------------------------------------
