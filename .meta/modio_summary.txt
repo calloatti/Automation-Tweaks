@@ -1,0 +1,1 @@
+A collection of quality-of-life tweaks for Timberborn that enhances automation.
