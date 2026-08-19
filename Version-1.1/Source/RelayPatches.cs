@@ -2,6 +2,8 @@
 using Timberborn.AutomationBuildings;
 using Timberborn.AutomationBuildingsUI;
 using Timberborn.BaseComponentSystem;
+using Timberborn.Localization;
+using Calloatti.Loc;
 using UnityEngine.UIElements;
 
 namespace Calloatti.AutoTweaks
@@ -21,7 +23,7 @@ namespace Calloatti.AutoTweaks
     public static void Postfix(VisualElement __result)
     {
       RelayUIState.ColorReplicationToggle = new Toggle();
-      RelayUIState.ColorReplicationToggle.text = "Replicate Input Colors";
+      RelayUIState.ColorReplicationToggle.text = LocHolder.Instance.Loc.T("Calloatti.AutoTweaks.Relay.ReplicateInputColors");
 
       RelayUIState.ColorReplicationToggle.AddToClassList("game-toggle");
       RelayUIState.ColorReplicationToggle.AddToClassList("entity-panel__text");

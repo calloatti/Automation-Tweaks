@@ -1,18 +1,21 @@
-﻿using HarmonyLib;
+﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using HarmonyLib;
+using Timberborn.BaseComponentSystem;
 using Timberborn.Illumination;
 using Timberborn.IlluminationUI;
-using Timberborn.BaseComponentSystem;
+using Timberborn.Localization;
+using Calloatti.Loc;
 using UnityEngine;
 using UnityEngine.UIElements;
-using System.Collections.Generic;
-using System;
-using System.Reflection;
 
 namespace Calloatti.AutoTweaks
 {
   public static class ColorNamesHelper
   {
-    public static readonly Dictionary<int, string> ColorNames = new Dictionary<int, string>();
+    public static readonly HashSet<int> KnownColors = new HashSet<int>();
     private static bool _colorsLoaded = false;
 
     public static void LoadColorNamesFromText(string text)
@@ -28,7 +31,7 @@ namespace Calloatti.AutoTweaks
           string[] parts = line.Split(',');
           if (parts.Length >= 2 && int.TryParse(parts[0].Trim().TrimStart('#'), System.Globalization.NumberStyles.HexNumber, null, out int colorInt))
           {
-            ColorNames[colorInt] = parts[1].Trim();
+            KnownColors.Add(colorInt);
           }
         }
       }
@@ -36,41 +39,129 @@ namespace Calloatti.AutoTweaks
     }
   }
 
+  public sealed class BoolWrapper
+  {
+    public bool Value;
+  }
+
+  public sealed class UIPair
+  {
+    public Label ColorNameLabel;
+    public Button ResetButton;
+  }
+
   public static class ColorUIState
   {
-    public static Label ColorNameLabel;
-    public static Button ResetButton;
+    public static readonly ConditionalWeakTable<CustomizableIlluminator, BoolWrapper> PanelVisibility = new();
+    public static readonly ConditionalWeakTable<CustomizableIlluminatorFragment, UIPair> FragmentUI = new();
+
+    public static bool GetPanelVisible(CustomizableIlluminator illuminator)
+    {
+      return PanelVisibility.TryGetValue(illuminator, out var wrapper) ? wrapper.Value : false;
+    }
+
+    public static void SetPanelVisible(CustomizableIlluminator illuminator, bool visible)
+    {
+      var wrapper = PanelVisibility.GetOrCreateValue(illuminator);
+      wrapper.Value = visible;
+    }
+
+    public static UIPair GetOrCreateFragmentUI(CustomizableIlluminatorFragment fragment, VisualElement root)
+    {
+      if (!FragmentUI.TryGetValue(fragment, out var pair))
+      {
+        var label = new Label(LocHolder.Instance.Loc.T("Calloatti.AutoTweaks.ColorUI.SelectedColor"))
+        {
+          style = { unityTextAlign = TextAnchor.MiddleCenter, color = new Color(0.7f, 0.7f, 0.7f), marginTop = 2, marginBottom = 2 }
+        };
+        var button = new Button();
+        button.text = LocHolder.Instance.Loc.T("Calloatti.AutoTweaks.ColorUI.RevertToDefaultColor");
+
+        Color mainBg = new Color32(45, 75, 60, 255);
+        Color borderColor = new Color32(154, 134, 94, 255);
+        Color textColor = new Color32(255, 255, 255, 255);
+
+        button.style.backgroundColor = mainBg;
+        button.style.color = textColor;
+
+        button.style.borderTopColor = borderColor;
+        button.style.borderBottomColor = borderColor;
+        button.style.borderLeftColor = borderColor;
+        button.style.borderRightColor = borderColor;
+
+        button.style.borderTopWidth = 1;
+        button.style.borderBottomWidth = 1;
+        button.style.borderLeftWidth = 1;
+        button.style.borderRightWidth = 1;
+
+        button.style.borderTopLeftRadius = 1;
+        button.style.borderTopRightRadius = 1;
+        button.style.borderBottomLeftRadius = 1;
+        button.style.borderBottomRightRadius = 1;
+
+        button.style.marginTop = 10;
+        button.style.marginBottom = 10;
+        button.style.alignSelf = Align.Center;
+        button.style.unityTextAlign = TextAnchor.MiddleCenter;
+        button.style.justifyContent = Justify.Center;
+        button.style.width = new Length(90, LengthUnit.Percent);
+        button.style.height = 24;
+
+        var ui = new UIPair { ColorNameLabel = label, ResetButton = button };
+        FragmentUI.Add(fragment, ui);
+        return ui;
+      }
+      return FragmentUI.GetOrCreateValue(fragment);
+    }
+  }
+
+  [HarmonyPatch(typeof(CustomizableIlluminator), "SetIsCustomized")]
+  public static class Patch_SetIsCustomized
+  {
+    public static bool Prefix(CustomizableIlluminator __instance, bool value)
+    {
+      __instance.IsCustomized = true;
+      return false;
+    }
+  }
+
+  [HarmonyPatch(typeof(CustomizableIlluminator), "SetCustomColor")]
+  public static class Patch_SetCustomColor
+  {
+    public static bool Prefix(CustomizableIlluminator __instance, Color? value)
+    {
+      if (value == null)
+      {
+        __instance._customColor = __instance._defaultColor;
+        __instance.Apply();
+        return false;
+      }
+      return true;
+    }
   }
 
   [HarmonyPatch(typeof(CustomizableIlluminator), "Apply")]
-  public static class Patch_KeepColorWhenUIClosed
-  {
-    public static bool Prefix(CustomizableIlluminator __instance, IlluminatorColorizer ____illuminatorColorizer, ref Color? ____appliedColor, Color? ____customColor)
-    {
-      Color? colorToApply = ____customColor.HasValue ? ____customColor : null;
-      if (____appliedColor != colorToApply)
-      {
-        if (colorToApply.HasValue) ____illuminatorColorizer.SetColor(colorToApply.Value);
-        else ____illuminatorColorizer.ClearColor();
-        ____appliedColor = colorToApply;
-
-        // Note: Events are heavily restricted by the C# compiler even when publicized.
-        // We maintain the reflection here specifically for the event invocation to ensure stability, 
-        // while safely adding BindingFlags.Public to catch it if the publicizer shifted it.
-        FieldInfo eventField = typeof(CustomizableIlluminator).GetField("AppliedColorChanged", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-        if (eventField != null)
+  public static class Patch_Apply
+{
+        public static bool Prefix(CustomizableIlluminator __instance, IlluminatorColorizer ____illuminatorColorizer, ref Color? ____appliedColor, Color? ____customColor)
         {
-          MulticastDelegate eventDelegate = (MulticastDelegate)eventField.GetValue(__instance);
-          if (eventDelegate != null)
+          Color color = __instance._customColor ?? __instance._defaultColor;
+          if (____appliedColor != color)
           {
-            foreach (var handler in eventDelegate.GetInvocationList())
-            {
-              handler.Method.Invoke(handler.Target, new object[] { __instance, EventArgs.Empty });
-            }
+            ____illuminatorColorizer.SetColor(color);
+            ____appliedColor = color;
           }
+          return false;
         }
       }
-      return false;
+
+  [HarmonyPatch(typeof(CustomizableIlluminator), "get_EffectiveColor")]
+  public static class Patch_EffectiveColor
+  {
+    public static bool Prefix(CustomizableIlluminator __instance, ref Color __result)
+    {
+      __result = __instance._customColor ?? __instance._defaultColor;
+      return true;
     }
   }
 
@@ -99,62 +190,29 @@ namespace Calloatti.AutoTweaks
       var rgbContainer = rgbField?.parent;
       if (rgbContainer != null && rgbContainer.parent != null)
       {
-        ColorUIState.ColorNameLabel = new Label("Selected Color")
-        {
-          style = { unityTextAlign = TextAnchor.MiddleCenter, color = new Color(0.7f, 0.7f, 0.7f), marginTop = 2, marginBottom = 2 }
-        };
+        var ui = ColorUIState.GetOrCreateFragmentUI(__instance, __result);
+
         int insertIndex = rgbContainer.parent.IndexOf(rgbContainer);
-        rgbContainer.parent.Insert(insertIndex + 1, ColorUIState.ColorNameLabel);
+        rgbContainer.parent.Insert(insertIndex + 1, ui.ColorNameLabel);
       }
 
-      // 1. Create a standard Unity Button
-      ColorUIState.ResetButton = new Button();
-      ColorUIState.ResetButton.text = "Revert to Default Color";
+      var uiPair = ColorUIState.GetOrCreateFragmentUI(__instance, __result);
 
-      // 2. Simplified Colors (Using the previous hover color for the static background)
-      Color mainBg = new Color32(45, 75, 60, 255);
-      Color borderColor = new Color32(154, 134, 94, 255); // Game Gold
-      Color textColor = new Color32(255, 255, 255, 255);  // White
-
-      // 3. Apply Base Styles
-      ColorUIState.ResetButton.style.backgroundColor = mainBg;
-      ColorUIState.ResetButton.style.color = textColor;
-
-      // Apply 1-pixel crisp borders
-      ColorUIState.ResetButton.style.borderTopColor = borderColor;
-      ColorUIState.ResetButton.style.borderBottomColor = borderColor;
-      ColorUIState.ResetButton.style.borderLeftColor = borderColor;
-      ColorUIState.ResetButton.style.borderRightColor = borderColor;
-
-      ColorUIState.ResetButton.style.borderTopWidth = 1;
-      ColorUIState.ResetButton.style.borderBottomWidth = 1;
-      ColorUIState.ResetButton.style.borderLeftWidth = 1;
-      ColorUIState.ResetButton.style.borderRightWidth = 1;
-
-      ColorUIState.ResetButton.style.borderTopLeftRadius = 1;
-      ColorUIState.ResetButton.style.borderTopRightRadius = 1;
-      ColorUIState.ResetButton.style.borderBottomLeftRadius = 1;
-      ColorUIState.ResetButton.style.borderBottomRightRadius = 1;
-
-      // 4. Layout and Spacing
-      ColorUIState.ResetButton.style.marginTop = 10;
-      ColorUIState.ResetButton.style.marginBottom = 10;
-      ColorUIState.ResetButton.style.alignSelf = Align.Center;
-      ColorUIState.ResetButton.style.unityTextAlign = TextAnchor.MiddleCenter;
-      ColorUIState.ResetButton.style.justifyContent = Justify.Center;
-      ColorUIState.ResetButton.style.width = new Length(90, LengthUnit.Percent);
-      ColorUIState.ResetButton.style.height = 24;
-
-      ColorUIState.ResetButton.RegisterCallback<ClickEvent>(evt =>
+      // Prevent duplicate callback registration
+      if (!(uiPair.ResetButton.userData is bool))
       {
-        var customIllum = __instance._customizableIlluminator;
-        if (customIllum != null)
+        uiPair.ResetButton.userData = true;
+        uiPair.ResetButton.RegisterCallback<ClickEvent>(evt =>
         {
-          customIllum.SetCustomColor(null);
-          Patch_CustomizableIlluminatorFragment_UpdateCustomColor.UpdateLabelText(__instance);
-        }
-      });
-      __result.Add(ColorUIState.ResetButton);
+          var customIllum = __instance._customizableIlluminator;
+          if (customIllum != null)
+          {
+            customIllum.SetCustomColor(null);
+            Patch_CustomizableIlluminatorFragment_UpdateCustomColor.UpdateLabelText(__instance);
+          }
+        });
+      }
+      __result.Add(uiPair.ResetButton);
 
       var list = __instance._presetColorButtons as System.Collections.IList;
       if (list != null)
@@ -166,9 +224,16 @@ namespace Calloatti.AutoTweaks
           var item2 = (Button)AccessTools.Field(itemType, "Item2").GetValue(item);
           Color32 c32 = (Color)item1;
           int colorKey = (c32.r << 16) | (c32.g << 8) | (c32.b);
-          if (ColorNamesHelper.ColorNames.TryGetValue(colorKey, out string name))
+          if (ColorNamesHelper.KnownColors.Contains(colorKey))
           {
-            item2.RegisterCallback<MouseEnterEvent>(evt => { if (ColorUIState.ColorNameLabel != null) ColorUIState.ColorNameLabel.text = name; });
+            string colorLocKey = $"Calloatti.AutoTweaks.ColorName.{colorKey:X6}";
+            item2.RegisterCallback<MouseEnterEvent>(evt =>
+            {
+              if (ColorUIState.FragmentUI.TryGetValue(__instance, out var pair))
+              {
+                pair.ColorNameLabel.text = LocHolder.Instance.Loc.T(colorLocKey);
+              }
+            });
             item2.RegisterCallback<MouseLeaveEvent>(evt => Patch_CustomizableIlluminatorFragment_UpdateCustomColor.UpdateLabelText(__instance));
           }
         }
@@ -194,20 +259,71 @@ namespace Calloatti.AutoTweaks
 
     public static void UpdateLabelText(CustomizableIlluminatorFragment __instance)
     {
-      if (ColorUIState.ColorNameLabel == null || __instance == null) return;
+      if (!ColorUIState.FragmentUI.TryGetValue(__instance, out var pair) || __instance == null) return;
 
       var illuminator = __instance._customizableIlluminator;
       if (illuminator == null) return;
 
-      if (ColorUIState.ResetButton != null)
+      if (pair.ResetButton != null)
       {
         Color? currentCustomColor = illuminator.CustomColor;
-        ColorUIState.ResetButton.SetEnabled(currentCustomColor.HasValue);
+        pair.ResetButton.SetEnabled(currentCustomColor.HasValue);
       }
 
       Color32 c = illuminator.CustomColor;
       int key = (c.r << 16) | (c.g << 8) | c.b;
-      ColorUIState.ColorNameLabel.text = ColorNamesHelper.ColorNames.TryGetValue(key, out string name) ? name : "Custom Hex Color";
+      string colorLocKey = $"Calloatti.AutoTweaks.ColorName.{key:X6}";
+      pair.ColorNameLabel.text = ColorNamesHelper.KnownColors.Contains(key) ? LocHolder.Instance.Loc.T(colorLocKey) : LocHolder.Instance.Loc.T("Calloatti.AutoTweaks.ColorUI.CustomHexColor");
+    }
+  }
+
+  [HarmonyPatch(typeof(CustomizableIlluminatorFragment), nameof(CustomizableIlluminatorFragment.UpdateFragment))]
+  public static class Patch_CustomizableIlluminatorFragment_UpdateFragment
+  {
+    [HarmonyPostfix]
+    public static void Postfix(CustomizableIlluminatorFragment __instance)
+    {
+      if (__instance._root == null) return;
+      if (__instance._customizableIlluminator != null && __instance._customizableIlluminator.IsLocked)
+      {
+        __instance._root.style.display = DisplayStyle.None;
+        return;
+      }
+      var illuminator = __instance._customizableIlluminator;
+      bool visible = false;
+      if (illuminator != null)
+      {
+        visible = ColorUIState.GetPanelVisible(illuminator);
+      }
+      __instance._root.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+  }
+
+  [HarmonyPatch(typeof(CustomizableIlluminatorFragment), nameof(CustomizableIlluminatorFragment.ClearFragment))]
+  public static class Patch_CustomizableIlluminatorFragment_ClearFragment
+  {
+    [HarmonyPostfix]
+    public static void Postfix(CustomizableIlluminatorFragment __instance)
+    {
+      if (__instance._customizableIlluminator != null)
+      {
+        ColorUIState.PanelVisibility.Remove(__instance._customizableIlluminator);
+      }
+    }
+  }
+
+  [HarmonyPatch(typeof(CustomizeIlluminationFragment), "OnClicked")]
+  public static class Patch_CustomizeIlluminationFragment_OnClicked
+  {
+    [HarmonyPrefix]
+    public static void Prefix(CustomizeIlluminationFragment __instance)
+    {
+      var illuminator = __instance._customizableIlluminator;
+      if (illuminator != null)
+      {
+        bool current = ColorUIState.GetPanelVisible(illuminator);
+        ColorUIState.SetPanelVisible(illuminator, !current);
+      }
     }
   }
 }

@@ -1,8 +1,8 @@
 ﻿{
   "Name": "Automation Tweaks",
-  "Version": "1.0.1",
+  "Version": "1.0.2",
   "Id": "Calloatti.AutoTweaks",
-  "MinimumGameVersion": "1.0.12.5",
+  "MinimumGameVersion": "1.0.13.1",
   "Description": "A collection of quality-of-life tweaks for Timberborn that enhances automation.",
   "RequiredMods": [{"Id": "Harmony", "MinVersion": "2.4.1"}],
   "OptionalMods": []

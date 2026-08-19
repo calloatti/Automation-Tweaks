@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using Timberborn.Automation;
 using Timberborn.AutomationBuildings;
 using Timberborn.BaseComponentSystem;
@@ -20,12 +22,12 @@ namespace Calloatti.AutoTweaks
     private Relay _relay;
     private Automator _automator;
     private CustomizableIlluminator _customizableIlluminator;
-    private CustomizableIlluminator _inputACustomizableIlluminator;
-    private CustomizableIlluminator _inputBCustomizableIlluminator;
 
-    private int _triggeringInput = 1; // 1 for A, 2 for B
-    private bool _prevAActive;
-    private bool _prevBActive;
+    private readonly List<CustomizableIlluminator> _subscribedIlluminators = new List<CustomizableIlluminator>();
+
+    private readonly List<Automator> _activationHistory = new List<Automator>(2);
+
+    private readonly Dictionary<Automator, bool> _prevStateMap = new Dictionary<Automator, bool>();
 
     public bool IsColorReplicationEnabled { get; private set; }
 
@@ -53,6 +55,7 @@ namespace Calloatti.AutoTweaks
     public void OnEnterFinishedState()
     {
       ResubscribeToInputColors();
+      SeedActivationHistory();
       ReplicateInputColors();
       ((IRelationOwner)_automator).RelationsChanged += OnRelationsChanged;
     }
@@ -68,7 +71,14 @@ namespace Calloatti.AutoTweaks
       if (IsColorReplicationEnabled != value)
       {
         IsColorReplicationEnabled = value;
-        ResubscribeToInputColors();
+        if (!value)
+        {
+          UnsubscribeFromInputColors();
+        }
+        else
+        {
+          ResubscribeToInputColors();
+        }
         ReplicateInputColors();
       }
     }
@@ -92,25 +102,39 @@ namespace Calloatti.AutoTweaks
       UnsubscribeFromInputColors();
       if (!IsColorReplicationEnabled) return;
 
+      var currentTransmitters = new HashSet<Automator>();
       if (_relay.InputA != null)
       {
-        _inputACustomizableIlluminator = _relay.InputA.GetComponent<CustomizableIlluminator>();
-        if (_inputACustomizableIlluminator != null && _inputACustomizableIlluminator)
+        currentTransmitters.Add(_relay.InputA);
+        var illum = _relay.InputA.GetComponent<CustomizableIlluminator>();
+        if (illum != null && illum)
         {
-          _inputACustomizableIlluminator.CustomColorChanged += OnInputCustomColorChanged;
+          illum.CustomColorChanged += OnInputCustomColorChanged;
+          _subscribedIlluminators.Add(illum);
         }
       }
 
       if (_relay.UsesInputB && _relay.InputB != null)
       {
-        _inputBCustomizableIlluminator = _relay.InputB.GetComponent<CustomizableIlluminator>();
-        if (_inputBCustomizableIlluminator != null && _inputBCustomizableIlluminator)
+        currentTransmitters.Add(_relay.InputB);
+        var illum = _relay.InputB.GetComponent<CustomizableIlluminator>();
+        if (illum != null && illum)
         {
-          _inputBCustomizableIlluminator.CustomColorChanged += OnInputCustomColorChanged;
+          illum.CustomColorChanged += OnInputCustomColorChanged;
+          _subscribedIlluminators.Add(illum);
         }
       }
 
-      if (_inputACustomizableIlluminator != null || _inputBCustomizableIlluminator != null)
+      // Clean up _prevStateMap for transmitters no longer connected
+      foreach (var tx in _prevStateMap.Keys.ToList())
+      {
+        if (!currentTransmitters.Contains(tx))
+        {
+          _prevStateMap.Remove(tx);
+        }
+      }
+
+      if (_subscribedIlluminators.Count > 0)
       {
         _customizableIlluminator.Lock();
       }
@@ -118,22 +142,36 @@ namespace Calloatti.AutoTweaks
 
     private void UnsubscribeFromInputColors()
     {
-      if (_inputACustomizableIlluminator != null)
+      foreach (var illum in _subscribedIlluminators)
       {
-        _inputACustomizableIlluminator.CustomColorChanged -= OnInputCustomColorChanged;
-        _inputACustomizableIlluminator = null;
+        if (illum != null && illum)
+        {
+          illum.CustomColorChanged -= OnInputCustomColorChanged;
+        }
       }
-      if (_inputBCustomizableIlluminator != null)
-      {
-        _inputBCustomizableIlluminator.CustomColorChanged -= OnInputCustomColorChanged;
-        _inputBCustomizableIlluminator = null;
-      }
+      _subscribedIlluminators.Clear();
       _customizableIlluminator.Unlock();
     }
 
     private void OnInputCustomColorChanged(object sender, EventArgs e)
     {
       ReplicateInputColors();
+    }
+
+    private void SeedActivationHistory()
+    {
+      _activationHistory.Clear();
+      bool aActive = _relay.InputA != null && _relay.InputA.State == AutomatorState.On;
+      bool bActive = _relay.UsesInputB && _relay.InputB != null && _relay.InputB.State == AutomatorState.On;
+
+      if (_relay.InputA != null && aActive)
+      {
+        _activationHistory.Add(_relay.InputA);
+      }
+      if (_relay.InputB != null && bActive)
+      {
+        _activationHistory.Add(_relay.InputB);
+      }
     }
 
     private void ReplicateInputColors()
@@ -143,65 +181,99 @@ namespace Calloatti.AutoTweaks
       bool aActive = _relay.InputA != null && _relay.InputA.State == AutomatorState.On;
       bool bActive = _relay.UsesInputB && _relay.InputB != null && _relay.InputB.State == AutomatorState.On;
 
-      // Determine which input caused the relay to turn ON based on its logic mode
+      if (_relay.InputA != null)
+      {
+        _prevStateMap.TryGetValue(_relay.InputA, out bool wasActive);
+        if (aActive && !wasActive)
+        {
+          int existingIndex = _activationHistory.IndexOf(_relay.InputA);
+          if (existingIndex >= 0) _activationHistory.RemoveAt(existingIndex);
+          _activationHistory.Insert(0, _relay.InputA);
+          if (_activationHistory.Count > 2) _activationHistory.RemoveAt(_activationHistory.Count - 1);
+        }
+        _prevStateMap[_relay.InputA] = aActive;
+      }
+      if (_relay.InputB != null)
+      {
+        _prevStateMap.TryGetValue(_relay.InputB, out bool wasActive);
+        if (bActive && !wasActive)
+        {
+          int existingIndex = _activationHistory.IndexOf(_relay.InputB);
+          if (existingIndex >= 0) _activationHistory.RemoveAt(existingIndex);
+          _activationHistory.Insert(0, _relay.InputB);
+          if (_activationHistory.Count > 2) _activationHistory.RemoveAt(_activationHistory.Count - 1);
+        }
+        _prevStateMap[_relay.InputB] = bActive;
+      }
+
       if (_relay.Mode == RelayMode.And)
       {
         if (aActive && bActive)
         {
-          // The one that turned on last completed the AND circuit
-          if (!_prevAActive && _prevBActive) _triggeringInput = 1;
-          else if (_prevAActive && !_prevBActive) _triggeringInput = 2;
+          Automator lastToTurnOn = null;
+          if (_relay.InputA != null && _prevStateMap.TryGetValue(_relay.InputA, out bool aWasActive) && aActive && !aWasActive)
+            lastToTurnOn = _relay.InputA;
+          if (_relay.InputB != null && _prevStateMap.TryGetValue(_relay.InputB, out bool bWasActive) && bActive && !bWasActive)
+            lastToTurnOn = _relay.InputB;
+
+          if (lastToTurnOn != null)
+          {
+            int idx = _activationHistory.IndexOf(lastToTurnOn);
+            if (idx > 0)
+            {
+              _activationHistory.RemoveAt(idx);
+              _activationHistory.Insert(0, lastToTurnOn);
+            }
+          }
         }
       }
-      else if (_relay.Mode == RelayMode.Or)
-      {
-        // The most recent input to turn ON becomes the trigger
-        if (aActive && !_prevAActive) _triggeringInput = 1;
-        if (bActive && !_prevBActive) _triggeringInput = 2;
 
-        // Fallback: if the triggering input just turned off but the other is still on, revert to it
-        if (_triggeringInput == 1 && !aActive && bActive) _triggeringInput = 2;
-        if (_triggeringInput == 2 && !bActive && aActive) _triggeringInput = 1;
-      }
-      else if (_relay.Mode == RelayMode.Xor)
+      Automator triggeringTransmitter = null;
+      for (int i = 0; i < _activationHistory.Count; i++)
       {
-        // The active input triggers the XOR circuit
-        if (aActive && !bActive) _triggeringInput = 1;
-        else if (bActive && !aActive) _triggeringInput = 2;
-      }
-      else
-      {
-        // NOT / Passthrough defaults to Input A
-        _triggeringInput = 1;
+        var candidate = _activationHistory[i];
+        if (candidate == _relay.InputA && aActive)
+        {
+          triggeringTransmitter = candidate;
+          break;
+        }
+        if (candidate == _relay.InputB && bActive)
+        {
+          triggeringTransmitter = candidate;
+          break;
+        }
       }
 
-      // Save the state for the next evaluation tick
-      _prevAActive = aActive;
-      _prevBActive = bActive;
+      if (triggeringTransmitter == null)
+      {
+        if (aActive && _relay.InputA != null) triggeringTransmitter = _relay.InputA;
+        else if (bActive && _relay.InputB != null) triggeringTransmitter = _relay.InputB;
+      }
 
-      // Only push a replicated color if the Relay output is actually evaluating to ON right now
       if (_automator.UnfinishedState != AutomatorState.On)
       {
         return;
       }
 
-      // We now use the new nullable Color API directly
       Color? finalColor = null;
-
-      if (_triggeringInput == 2 && _relay.UsesInputB && _inputBCustomizableIlluminator != null)
+      if (triggeringTransmitter != null)
       {
-        finalColor = _inputBCustomizableIlluminator.CustomColor;
-      }
-      else if (_inputACustomizableIlluminator != null)
-      {
-        // Fallback to A if B is missing or if A is the actual trigger
-        finalColor = _inputACustomizableIlluminator.CustomColor;
+        if (triggeringTransmitter == _relay.InputA && _relay.InputA != null)
+        {
+          var illum = _relay.InputA.GetComponent<CustomizableIlluminator>();
+          if (illum != null) finalColor = illum.CustomColor;
+        }
+        else if (triggeringTransmitter == _relay.InputB && _relay.InputB != null)
+        {
+          var illum = _relay.InputB.GetComponent<CustomizableIlluminator>();
+          if (illum != null) finalColor = illum.CustomColor;
+        }
       }
 
       if (finalColor.HasValue)
       {
         _customizableIlluminator.SetIsCustomized(true);
-        _customizableIlluminator.SetCustomColor(finalColor);
+        _customizableIlluminator.SetCustomColor(finalColor.Value);
       }
     }
   }

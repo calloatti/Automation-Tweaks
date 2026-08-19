@@ -1,5 +1,4 @@
 ﻿using Bindito.Core;
-using HarmonyLib;
 using UnityEngine;
 using Timberborn.AssetSystem;
 using Timberborn.SingletonSystem;
@@ -8,21 +7,11 @@ namespace Calloatti.AutoTweaks
 {
   [Context("Game")]
   [Context("MapEditor")]
-  internal class PatchConfigurator : IConfigurator
+  internal class ColorNamesConfigurator : IConfigurator
   {
-    private const string HarmonyId = "calloatti.autotweaks";
-    private static Harmony _harmony;
-
     public void Configure(IContainerDefinition containerDefinition)
     {
       containerDefinition.Bind<ColorNamesLoader>().AsSingleton();
-
-      if (_harmony == null)
-      {
-        _harmony = new Harmony(HarmonyId);
-        _harmony.PatchAll(typeof(PatchConfigurator).Assembly);
-        Debug.Log($"[{HarmonyId}] All Harmony patches applied successfully!");
-      }
     }
   }
 

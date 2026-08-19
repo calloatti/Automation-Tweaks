@@ -14,7 +14,7 @@
 #00FFFF,Cyan
 #007DFF,ElectricBlue
 #D100FF,ElectricPurple
-#FF00FF,Fuchsia
+#FF00FF,Magenta
 #FFD100,GoldenYellow
 #FF0ABA,HotPink
 #4F00FF,Indigo
@@ -303,7 +303,6 @@
 #DC143C,Crimson
 #8C000F,Crimson
 #FFFD78,Custard
-#00FFFF,Cyan
 #58427C,Cyber Grape
 #FFFF31,Daffodil
 #FEDF08,Dandelion
@@ -778,7 +777,6 @@
 #FFB97B,Macaroni and Cheese
 #EFB435,Macaroni And Cheese
 #CC3336,Madder Lake
-#FF00FF,Magenta
 #F653A6,Magenta
 #C20078,Magenta
 #AAF0D1,Magic Mint
@@ -1384,7 +1382,6 @@
 #3AE57F,Weird Green
 #F5DEB3,Wheat
 #FBDD7E,Wheat
-#FFFFFF,White
 #F5F5F5,WhiteSmoke
 #7A89B8,Wild Blue Yonder
 #FF3399,Wild Strawberry

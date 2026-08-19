@@ -8,4 +8,9 @@
 
   <Import Project="CommonModSettings.props" />
 
+  <ItemGroup>
+    <DoNotPublicize Include="Timberborn.Illumination:Timberborn.Illumination.CustomizableIlluminator.CustomColorChanged" />
+    <DoNotPublicize Include="Timberborn.Illumination:Timberborn.Illumination.CustomizableIlluminator.AppliedColorChanged" />
+  </ItemGroup>
+
 </Project>
