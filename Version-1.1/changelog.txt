@@ -1,3 +1,7 @@
+* Game Version: 1.1.2.4 - Mod Version: 1.1.1
+- Updated due to 1.1.2.4 release
+* Game Version: 1.1.0.0 - Mod Version: 1.1.0
+- Add Replicate Input Color toggle for Memory building
 * Game Version: 1.1.0.0 - Mod Version: 1.0.2
 - Fix color persistence when UI closes
 - Fix Relay Color Replicator toggle behavior

@@ -10,7 +10,7 @@ Include ..\AGENTS.md
 - **Min Game Version:** 1.0.12.5 — uses `timberborn-decompiled-1.0.*`
 
 ## What This Mod Does
-Tweaks automation UI and behavior: patches automate button, auto-rename, relay colors, and relay behavior across automation buildings.
+Tweaks automation UI and behavior: patches automate button, auto-rename, relay/memory colors, and relay behavior across automation buildings.
 
 ## Source Architecture (`Version-1.0/Source/`)
 
@@ -23,6 +23,9 @@ Tweaks automation UI and behavior: patches automate button, auto-rename, relay c
 | `RelayPatches.cs` | Relay behavior patches (UI toggle for color replication) |
 | `RelayColorReplicator.cs` | Color replication logic for relays (activation history, mode-specific) |
 | `RelayColorReplicatorConfigurator.cs` | DI configurator for relay replicator |
+| `MemoryPatches.cs` | Memory behavior patches (UI toggle for color replication) |
+| `MemoryColorReplicator.cs` | Color replication logic for memory (activation history, mode-aware) |
+| `MemoryColorReplicatorConfigurator.cs` | DI configurator for memory replicator |
 
 ## Version Folders
 - `Version-1.0` — targets game 1.0.x.x
@@ -44,6 +47,14 @@ Tweaks automation UI and behavior: patches automate button, auto-rename, relay c
 - **Mode-specific logic**: AND (last to complete), OR (most recent ON), XOR (first active)
 - **Toggle behavior**: OFF = unlock + manual color works; ON = lock + replicate input color
 - **No re-check needed** when toggling — handles subscribe/unsubscribe cleanly
+
+### Memory Color Replicator (`MemoryColorReplicator.cs`)
+- **Activation history** (max 8 for v1.1, max 2 for v1.0) tracks input turn-on order
+- **Inputs tracked**: InputA + InputB only (ResetInput excluded as control signal)
+- **Mode-aware**: InputB only subscribed when `_memory.UsesInputB` is true (Latch/FlipFlop modes)
+- **Toggle behavior**: OFF = unlock + manual color works; ON = lock + replicate input color
+- **Input change detection**: re-subscribes when wiring changes (InputA/InputB reconnected)
+- **Evaluated on `Memory.CommitTick`** postfix — runs after state is committed
 
 ### Publicizer Fixes
 - `DoNotPublicize` for `CustomColorChanged` and `AppliedColorChanged` events in both `.csproj` files (fixes CS0229 ambiguity)

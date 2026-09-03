@@ -1,14 +1,4 @@
-* Game Version: 1.1.0.0 - Mod Version: 1.0.2
-- Fix color persistence when UI closes
-- Fix Relay Color Replicator toggle behavior
-- Fix per-building color panel visibility
-- Prevent duplicate callback registrations
-- Clean up stale event subscriptions
-- Clean up activation history for disconnected inputs
-* Game Version: 1.0.0.0 - Mod Version: 1.0.2
-- Fix color persistence when UI closes
-- Fix Relay Color Replicator toggle behavior
-- Fix per-building color panel visibility
-- Prevent duplicate callback registrations
-- Clean up stale event subscriptions
-- Clean up activation history for disconnected inputs
+* Game Version: 1.1.0.0 - Mod Version: 1.1.0
+- Add Replicate Input Color toggle for Memory building
+* Game Version: 1.0.0.0 - Mod Version: 1.1.0
+- Add Replicate Input Color toggle for Memory building

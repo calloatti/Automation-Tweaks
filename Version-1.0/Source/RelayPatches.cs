@@ -23,7 +23,7 @@ namespace Calloatti.AutoTweaks
     public static void Postfix(VisualElement __result)
     {
       RelayUIState.ColorReplicationToggle = new Toggle();
-      RelayUIState.ColorReplicationToggle.text = LocHolder.Instance.Loc.T("Calloatti.AutoTweaks.Relay.ReplicateInputColors");
+      RelayUIState.ColorReplicationToggle.text = LocHolder.Instance.Loc.T("Building.Indicator.ReplicateInputColor");
 
       RelayUIState.ColorReplicationToggle.AddToClassList("game-toggle");
       RelayUIState.ColorReplicationToggle.AddToClassList("entity-panel__text");

@@ -1,6 +1,6 @@
 <p>A collection of quality-of-life tweaks for Timberborn that enhances automation.</p>
 <p>More colors.<br />
-Relay Replicate input colors: Replicates the color of the last ON Input.<br />
+Relay and Memory Replicate input colors: When enabled, the building's color is automatically set to match the most recently activated input's color. For Memory, only InputA and InputB are considered (ResetInput is excluded).<br />
 Allows longer names.</p>
 <hr />
 <p><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3682179025">Mods on Steam</a></p>
